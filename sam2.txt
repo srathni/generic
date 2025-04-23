@@ -1,0 +1,31 @@
+This section outlines the end-to-end flow of data through the Spark ETL framework — from batch trigger to final output and logging. The process is driven entirely by metadata and is designed for high configurability and reusability.
+
+4.1 Batch Trigger
+
+Each batch is triggered by an external scheduler like AutoSys.
+Upon trigger, the batch ID is passed to the Spark driver.
+4.2 Source Loading
+
+All source tables (configured in AE_BATCH_SOURCE_MAP) are read once at the beginning of the batch.
+These are converted into Spark DataFrames and cached in memory for session-wide access.
+Source integrity is ensured via foreign key constraints with the AE_SOURCES table.
+4.3 Rule Execution
+
+Rules mapped to a batch (in AE_BATCH_RULES_MAP) are executed in the order of their rank.
+Each rule could be:
+A SELECT (defined through AE_RULES_DATA_MAP),
+An UPDATE / MERGE leveraging Apache Iceberg, or
+A custom script (Python/Scala-based logic).
+If a rule references AE_DERIVATION_LOOKUP, dynamic filter values are injected using a pivot operation on the lookup table.
+4.4 Output Writing
+
+Each rule can have an output target defined — either writing back to Iceberg tables or producing intermediate datasets.
+Output paths and modes (append/overwrite) are configured in AE_BATCH_RULES_MAP.
+4.5 Logging & Metrics
+
+Kafka is used to stream logs from each rule execution, capturing:
+Rule ID and name
+Start and end timestamps
+Record counts (input/output)
+Errors (if any)
+Logs feed into a dashboard and can trigger alerts for SLA breaches.
