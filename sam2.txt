@@ -1,31 +1,32 @@
-This section outlines the end-to-end flow of data through the Spark ETL framework — from batch trigger to final output and logging. The process is driven entirely by metadata and is designed for high configurability and reusability.
+The Spark ETL framework is designed with robust mechanisms to ensure any failure is properly captured, logged, and escalated to the appropriate support teams for resolution. The current failure handling strategy focuses on batch-level fail-safety with future provisions for granular control.
 
-4.1 Batch Trigger
+1. Capturable Failures (Business Logic / Data Errors)
 
-Each batch is triggered by an external scheduler like AutoSys.
-Upon trigger, the batch ID is passed to the Spark driver.
-4.2 Source Loading
+If a rule fails during execution and the error can be captured (e.g., bad SQL, missing columns, logical inconsistencies), the framework:
+Fails the entire batch immediately.
+Logs the exception details in the server logs.
+Publishes a structured error message to Kafka for monitoring and metrics dashboards.
+Causes the associated AutoSys job to fail.
+The Level 2 (L2) operations team is alerted upon job failure. They:
+Review the logged error.
+Restart the batch if the issue is transient or resolvable without code changes.
+Escalate the issue to the development team if deeper investigation or fixes are needed.
+2. System-Level Failures (Cluster Crash, Spark Driver Failure, etc.)
 
-All source tables (configured in AE_BATCH_SOURCE_MAP) are read once at the beginning of the batch.
-These are converted into Spark DataFrames and cached in memory for session-wide access.
-Source integrity is ensured via foreign key constraints with the AE_SOURCES table.
-4.3 Rule Execution
+In the case of failures that cannot be captured due to system-level issues:
+The L2 team monitors the batch failure through AutoSys or infrastructure alerts.
+They alert the development team for investigation and guidance.
+The team will determine whether a rerun is safe or if manual intervention is required.
+3. Pre-Batch Cleanup
 
-Rules mapped to a batch (in AE_BATCH_RULES_MAP) are executed in the order of their rank.
-Each rule could be:
-A SELECT (defined through AE_RULES_DATA_MAP),
-An UPDATE / MERGE leveraging Apache Iceberg, or
-A custom script (Python/Scala-based logic).
-If a rule references AE_DERIVATION_LOOKUP, dynamic filter values are injected using a pivot operation on the lookup table.
-4.4 Output Writing
+Prior to starting any batch, the framework performs cleanup of target output directories.
+This ensures the system maintains delete-and-load semantics, avoiding duplicates or conflicts in case of re-runs.
+Prevents partial data residues in case of mid-batch failures.
+4. Resume and Retry Strategy
 
-Each rule can have an output target defined — either writing back to Iceberg tables or producing intermediate datasets.
-Output paths and modes (append/overwrite) are configured in AE_BATCH_RULES_MAP.
-4.5 Logging & Metrics
-
-Kafka is used to stream logs from each rule execution, capturing:
-Rule ID and name
-Start and end timestamps
-Record counts (input/output)
-Errors (if any)
-Logs feed into a dashboard and can trigger alerts for SLA breaches.
+Currently, the framework does not support automatic rule-level resume or partial retries.
+The focus for the MVP is to ensure reliability at the batch level first.
+Rule-level resume capabilities are planned for a future enhancement, which would include:
+Rule execution state checkpoints.
+Retry flags per rule.
+Dependency-aware rule execution tracking.
