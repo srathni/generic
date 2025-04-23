@@ -1,0 +1,16 @@
+Python Script Registry and Modular Execution
+To enable dynamic and reusable execution of Python-based logic within rules, a centralized Python Script Registry is planned. This registry will be implemented as an in-memory dictionary that maps a configured script name (defined in the metadata table AE_BATCH_RULES_MAP) to its corresponding Python function.
+
+At runtime, the Spark engine will:
+
+Read the script name for the rule from the table.
+Look it up in the registry dictionary.
+Execute the function using a simple pattern:
+script_registry[script_name](parameters)
+This approach enables:
+
+Loose Coupling: Business logic is decoupled from the engine; new logic can be added without modifying the framework.
+Reusability: Common data transformation or enrichment functions can be reused across batches/rules.
+Security & Control: Only whitelisted and pre-registered scripts can be executed, reducing risk of arbitrary code injection.
+Versioning: Scripts can be versioned internally or across environments by maintaining multiple versions within the registry, e.g., script_registry["dedupe_v2"].
+This pattern will significantly simplify the integration of non-SQL logic, allowing domain-specific operations (e.g., scoring, advanced data cleanup) to be plugged into the engine seamlessly.
