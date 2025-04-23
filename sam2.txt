@@ -1,32 +1,35 @@
-The Spark ETL framework is designed with robust mechanisms to ensure any failure is properly captured, logged, and escalated to the appropriate support teams for resolution. The current failure handling strategy focuses on batch-level fail-safety with future provisions for granular control.
+Monitoring & Observability
+The Spark-based ETL framework is built with robust monitoring and observability mechanisms to ensure traceability, performance tracking, and reliable failure detection.
 
-1. Capturable Failures (Business Logic / Data Errors)
+1. Kafka-Based Logging
 
-If a rule fails during execution and the error can be captured (e.g., bad SQL, missing columns, logical inconsistencies), the framework:
-Fails the entire batch immediately.
-Logs the exception details in the server logs.
-Publishes a structured error message to Kafka for monitoring and metrics dashboards.
-Causes the associated AutoSys job to fail.
-The Level 2 (L2) operations team is alerted upon job failure. They:
-Review the logged error.
-Restart the batch if the issue is transient or resolvable without code changes.
-Escalate the issue to the development team if deeper investigation or fixes are needed.
-2. System-Level Failures (Cluster Crash, Spark Driver Failure, etc.)
+Each rule execution within a batch emits structured logs to a Kafka topic. These logs include:
 
-In the case of failures that cannot be captured due to system-level issues:
-The L2 team monitors the batch failure through AutoSys or infrastructure alerts.
-They alert the development team for investigation and guidance.
-The team will determine whether a rerun is safe or if manual intervention is required.
-3. Pre-Batch Cleanup
+Rule ID and Batch ID
+Start and End Timestamps
+Input and Output Record Counts
+Execution Status (Success/Failure)
+Exception Stack Trace (if any)
+These Kafka logs are consumed by downstream systems for analysis, alerting, and metrics aggregation.
 
-Prior to starting any batch, the framework performs cleanup of target output directories.
-This ensures the system maintains delete-and-load semantics, avoiding duplicates or conflicts in case of re-runs.
-Prevents partial data residues in case of mid-batch failures.
-4. Resume and Retry Strategy
+2. Server Logging
 
-Currently, the framework does not support automatic rule-level resume or partial retries.
-The focus for the MVP is to ensure reliability at the batch level first.
-Rule-level resume capabilities are planned for a future enhancement, which would include:
-Rule execution state checkpoints.
-Retry flags per rule.
-Dependency-aware rule execution tracking.
+In addition to Kafka-based logging, all Spark framework logs are persisted to local server log directories. These include:
+
+Batch-level and Rule-level execution logs
+Spark driver and executor logs
+SQL translation and execution diagnostics
+Exception and error stack traces
+DevOps-defined log rotation and archival policies are applied to manage disk usage.
+
+3. Failure Notification & Alerting
+
+Any rule failure due to logical or data-related errors is captured and logged.
+The associated batch is marked as failed, and the Autosys job is marked unsuccessful.
+L2 Support is alerted through monitoring tools.
+For recoverable issues, L2 can restart the batch. Complex issues are escalated to the development team.
+4. Real-Time Dashboards & API Integration
+
+The framework integrates with an existing in-house API and monitoring dashboard.
+All rule and batch-level metrics, including duration, record counts, and statuses, are sent in real time.
+This allows stakeholders to view execution summaries, track SLAs, and monitor anomalies without direct access to Spark or logs.
