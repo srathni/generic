@@ -1,10 +1,16 @@
-The new Spark-based ETL framework is designed around the concept of batches and rules. Each batch represents a logical unit of work, triggered externally via an AutoSys job scheduler. Batches are composed of one or more rules, which define the specific transformations or operations to be executed. These rules can include standard SQL operations such as SELECT, UPDATE, and MERGE (typically performed on Apache Iceberg tables), or custom logic written in Python, referred to as "scripts".
+3. High-Level Architecture
+The Spark-based ETL framework consists of the following key components:
 
-Each rule within a batch is assigned a rank to determine its execution order. The metadata for batch execution is maintained in relational tables:
-
-AE_BATCH: Stores metadata about each batch, including identifiers and scheduling details.
-AE_BATCH_RULES_MAP: Defines the set of rules associated with each batch, including their type (SQL/script), execution order, and output targets.
-AE_BATCH_SOURCE_MAP: Specifies the input datasets for the batch. At runtime, the framework reads these source definitions, materializes them as Spark DataFrames, and makes them available in the Spark session for use by any script or SQL rule during execution.
-As each batch runs, the framework reads the AE_BATCH_RULES_MAP, executes each rule in the defined order, and writes the output as configured. Logging is centralized via Kafka, capturing metrics such as rule-level runtime, record counts, and error information, which are later used for monitoring, auditing, and dashboarding.
-
-This design promotes modularity, traceability, and extensibility, allowing the ETL framework to scale with growing data and evolving logic requirements.
+Batch Orchestration System (AutoSys)
+AutoSys is responsible for triggering batch jobs based on predefined schedules. It ensures that batches are executed in an orderly fashion, adhering to the dependency chain of jobs.
+Batch Execution Engine (Spark)
+Apache Spark serves as the core engine for processing large volumes of data in parallel. The framework runs Spark jobs, orchestrating SQL transformations, updates, and custom Python scripts as defined in each batch's configuration.
+DataFrames: Data is loaded from various sources (e.g., S3, HDFS) into Spark DataFrames and transformed based on the defined rules.
+Iceberg Table Management
+Apache Iceberg is used for versioned data storage. The framework integrates Iceberg tables for transactional updates, enabling efficient read and write operations with ACID compliance.
+Metadata Store
+The AE_BATCH, AE_BATCH_RULES_MAP, and AE_BATCH_SOURCE_MAP tables serve as the central metadata store for managing batch execution, rules, and source data mappings. These tables are essential for dynamically determining which data sources and rules to execute for a given batch.
+Kafka Logging and Monitoring
+Kafka captures runtime metrics and logs, including execution time, rule-level success/failure, and processed record counts. These logs are critical for tracking the health of batch jobs, generating operational metrics, and feeding monitoring dashboards.
+Data Sources and Outputs
+The framework supports reading from various data sources (e.g., Parquet, Iceberg) and writing the results to a specified destination (e.g., S3, HDFS, databases). Outputs may be in the form of transformed Parquet files, updated Iceberg tables, or other formats as configured in the rule definitions.
