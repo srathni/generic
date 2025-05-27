@@ -1,34 +1,104 @@
-Security & Access Control
-Ensuring the security and integrity of data throughout the ETL pipeline is paramount. The framework implements a series of security measures to control access, protect sensitive data, and ensure that operations are conducted in a compliant manner.
+# Import necessary libraries
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+import os
 
-1. Authentication and Authorization
+# --- PySpark Session Configuration ---
+# To run this code, you'll need to submit it with the following packages:
+# org.apache.iceberg:iceberg-spark-runtime-3.x_2.12 (replace 3.x with your Spark major version, e.g., 3.5)
+# org.apache.hadoop:hadoop-aws:3.3.2 (or compatible version with your Hadoop/Spark)
+# com.amazonaws:aws-java-sdk-bundle:1.12.262 (or compatible version)
 
-Authentication: The ETL framework integrates with the organization's existing identity and access management (IAM) system (e.g., LDAP, OAuth, or Active Directory) for user authentication.
-Authorization: User roles and permissions are defined in a centralized access control system. Roles are assigned based on responsibility, and permissions are scoped to specific batches, tables, or actions (read/write/execute).
-Admins: Full access to batch execution, rule management, and data sources.
-Data Engineers: Access to create and modify batches and rules but restricted from certain system-wide operations.
-Viewers: Read-only access to monitor batch statuses, logs, and metrics.
-2. Data Encryption
+# Example spark-submit command (adjust versions as needed):
+# spark-submit \
+#   --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12,org.apache.hadoop:hadoop-aws:3.3.2,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
+#   --conf "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions" \
+#   --conf "spark.sql.catalog.s3_catalog=org.apache.iceberg.spark.SparkCatalog" \
+#   --conf "spark.sql.catalog.s3_catalog.type=hadoop" \
+#   --conf "spark.sql.catalog.s3_catalog.warehouse=s3a://your-bucket-name/iceberg_warehouse" \
+#   --conf "spark.hadoop.fs.s3a.endpoint=http://localhost:9000" \
+#   --conf "spark.hadoop.fs.s3a.access.key=YOUR_ACCESS_KEY" \
+#   --conf "spark.hadoop.fs.s3a.secret.key=YOUR_SECRET_KEY" \
+#   --conf "spark.hadoop.fs.s3a.path.style.access=true" \
+#   --conf "spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem" \
+#   your_script_name.py
 
-In Transit: All data exchanged between the Spark engine and external systems (e.g., databases, data lakes, Kafka) is encrypted using industry-standard protocols such as TLS/SSL.
-At Rest: Data stored in S3, HDFS, or any other data store is encrypted using AES-256 or equivalent encryption standards. Key management is handled via a secure key management service (KMS).
-3. Audit Logging
+# Initialize SparkSession
+# Replace 'your-bucket-name' with your actual S3 bucket name
+# Replace 'http://localhost:9000' with your S3-compatible object store endpoint (e.g., MinIO, Ceph, etc.)
+# Replace 'YOUR_ACCESS_KEY' and 'YOUR_SECRET_KEY' with your actual credentials
+# Ensure 'spark.hadoop.fs.s3a.path.style.access=true' is set for S3-compatible stores that require it.
 
-Comprehensive audit logging is implemented to track:
-User actions (e.g., initiating a batch, modifying rules)
-Data access patterns (e.g., read/write operations on sensitive data)
-System-level changes (e.g., upgrades, configuration changes)
-Audit logs are stored securely and can be accessed only by authorized personnel.
+spark = SparkSession.builder \
+    .appName("IcebergS3Example") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.sql.catalog.s3_catalog", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.s3_catalog.type", "hadoop") \
+    .config("spark.sql.catalog.s3_catalog.warehouse", "s3a://your-bucket-name/iceberg_warehouse") \
+    .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000") \
+    .config("spark.hadoop.fs.s3a.access.key", "YOUR_ACCESS_KEY") \
+    .config("spark.hadoop.fs.s3a.secret.key", "YOUR_SECRET_KEY") \
+    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .getOrCreate()
 
-4. Sensitive Data Handling
+# Set log level to WARN to reduce verbosity
+spark.sparkContext.setLogLevel("WARN")
 
-Data Masking: Sensitive information (e.g., personally identifiable information, financial data) is masked or obfuscated when read from or written to source or destination systems.
-Access Control on Sensitive Columns: Additional row-level security is implemented to ensure that sensitive data is only accessible by users with the appropriate clearance.
-Data Anonymization: Where applicable, data anonymization techniques are applied to ensure that even if data is accessed without authorization, it cannot be linked back to individuals or sensitive entities.
-5. Secure API Access
+print("SparkSession created successfully with Iceberg and S3 configurations.")
 
-All APIs exposed by the framework (for logging, monitoring, batch control, etc.) require API keys or OAuth tokens for access. These APIs are protected with rate limiting and IP whitelisting to prevent abuse.
-6. Compliance & Regulatory Requirements
+# --- Define Schema for the Iceberg Table ---
+schema = StructType([
+    StructField("id", IntegerType(), True),
+    StructField("name", StringType(), True),
+    StructField("city", StringType(), True),
+    StructField("age", IntegerType(), True),
+    StructField("salary", DoubleType(), True)
+])
 
-The framework is designed to meet industry-specific security and compliance standards (e.g., GDPR, HIPAA, SOC 2). Periodic security audits and vulnerability assessments are conducted to ensure ongoing compliance.
-This section outlines the security mechanisms in place to protect the ETL process and the data it handles. Let me know if you'd like to modify any part or expand on a specific area! Ready for the next section?
+# --- Create Sample Data ---
+data = [
+    (1, "Alice", "New York", 30, 75000.0),
+    (2, "Bob", "Los Angeles", 24, 60000.50),
+    (3, "Charlie", "Chicago", 35, 90000.75),
+    (4, "David", "Houston", 29, 68000.0),
+    (5, "Eve", "Miami", 42, 105000.25)
+]
+
+# Create a DataFrame from the sample data and schema
+df = spark.createDataFrame(data, schema)
+print("\nSample DataFrame created:")
+df.show()
+df.printSchema()
+
+# --- Create and Write to Iceberg Table ---
+table_name = "s3_catalog.default.my_iceberg_table"
+print(f"\nAttempting to write DataFrame to Iceberg table: {table_name}")
+
+try:
+    # Write the DataFrame to the Iceberg table
+    # 'append' mode will add new rows, 'overwrite' will replace the table content
+    # 'createOrReplace' will create if not exists, or replace if exists
+    df.writeTo(table_name).createOrReplace()
+    print(f"Successfully wrote data to Iceberg table: {table_name}")
+except Exception as e:
+    print(f"Error writing to Iceberg table: {e}")
+    # If the table already exists and you want to append:
+    # df.writeTo(table_name).append()
+    # If the table already exists and you want to overwrite:
+    # df.writeTo(table_name).overwritePartitions() # Use if partitioned
+    # df.writeTo(table_name).mode("overwrite").save() # General overwrite
+
+# --- Read Data from Iceberg Table (for verification) ---
+print(f"\nAttempting to read data from Iceberg table: {table_name}")
+try:
+    read_df = spark.read.table(table_name)
+    print("Data read from Iceberg table:")
+    read_df.show()
+    read_df.printSchema()
+except Exception as e:
+    print(f"Error reading from Iceberg table: {e}")
+
+# --- Stop SparkSession ---
+spark.stop()
+print("\nSparkSession stopped.")
