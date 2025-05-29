@@ -5,3 +5,13 @@ A key achievement was implementing a configuration-driven approach, where execut
 The framework adheres to clean code architecture principles and emphasizes modularity, with clear boundaries and separation of concerns. Each component is responsible for a single, well-defined task, making the system open to extension without impacting existing logic. This ensures new functionality can be introduced safely and with confidence.
 
 This work reflects my strengths in backend engineering, system design, and clean code practices, and has laid a solid foundation for a scalable, maintainable, and cost-efficient data pipeline ecosystem. By prioritizing clarity, reusability, and extensibility, the framework positions the team for long-term success and operational stability.
+
+
+
+focus
+
+As we continue evolving the data platform, my focus will be on refining the framework to be even more robust, scalable, and efficient from an architectural standpoint. I aim to enhance its flexibility and maintainability while keeping performance and cost-efficiency at the forefront. Continued progress in modularizing key components and abstracting logic cleanly will be crucial to achieving long-term sustainability of the system.
+
+In the near term, I see opportunities to improve developer experience through better documentation, onboarding, and observability. I also want to ensure strong test coverage and build a more intuitive configuration-driven approach that reduces manual intervention and encourages safe extensibility.
+
+On a personal development level, I’m committed to deepening my understanding of distributed data processing, clean architecture principles, and effective engineering communication. I also want to grow as a collaborator by offering mentorship, contributing to technical discussions, and supporting the team’s overall success through thoughtful engineering practices.
