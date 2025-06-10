@@ -29,3 +29,16 @@ Given the foundational nature of my work and its critical role in supporting bus
 
 
 The code architecture I am helping design integrates robust Kafka logging paired with a sophisticated retry mechanism. This approach not only ensures reliable, fault-tolerant data pipeline execution but also highlights my strengths in algorithmic thinking and systems design, reflecting a deep commitment to building resilient, scalable, and maintainable infrastructure.
+
+
+SELECT
+    SqlColumn,
+    CASE
+        WHEN CHARINDEX('END', SqlColumn) > 0
+             AND CHARINDEX('AS', SUBSTRING(SqlColumn, CHARINDEX('END', SqlColumn) + 3, LEN(SqlColumn) - CHARINDEX('END', SqlColumn) - 2)) > 0
+             AND LTRIM(RTRIM(SUBSTRING(SUBSTRING(SqlColumn, CHARINDEX('END', SqlColumn) + 3, LEN(SqlColumn) - CHARINDEX('END', SqlColumn) - 2), 1, CHARINDEX('AS', SUBSTRING(SqlColumn, CHARINDEX('END', SqlColumn) + 3, LEN(SqlColumn) - CHARINDEX('END', SqlColumn) - 2)) - 1))) = ''
+        THEN 1
+        ELSE 0
+    END AS HasEndAsAsColumnName
+FROM
+    YourTable;
