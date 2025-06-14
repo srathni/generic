@@ -220,7 +220,7 @@ def main():
     st.markdown("---")
     st.header("Current Batch Summary")
     
-    # Display in a nice format
+        # Display in a nice format
     summary_data = {
         "Field": ["Batch Name", "Description", "Source System ID", "Enabled", "Created By", "Created Date", "Last Modified By", "Last Modified Date"],
         "Value": [
@@ -230,4 +230,15 @@ def main():
             batch_details['enabled_flag'],
             batch_details['created_by'],
             str(batch_details['created_date']),
+            batch_details['last_modified_by'] if pd.notna(batch_details['last_modified_by']) else "N/A",
+            str(batch_details['last_modified_date']) if pd.notna(batch_details['last_modified_date']) else "N/A"
+        ]
+    }
+    
+    summary_df = pd.DataFrame(summary_data)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+if __name__ == "__main__":
+    main()
+ted_date']),
             batch_details['last_modified_by
