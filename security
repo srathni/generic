@@ -1,44 +1,233 @@
-This year, I led the development of a new PySpark-based data pipeline framework designed to replace a legacy ETL solution. The focus was on building a scalable, maintainable, and extensible system from the ground up — one that can adapt to evolving data needs with minimal disruption.
+import streamlit as st
+import pandas as pd
+import pyodbc
+from datetime import datetime
 
-A key achievement was implementing a configuration-driven approach, where execution logic is fully controlled by metadata. This empowers teams to onboard new rules and workflows quickly, without modifying the core codebase — significantly improving agility and reducing time-to-production for new use cases.
+# Database connection configuration
+@st.cache_resource
+def init_connection():
+    """Initialize database connection"""
+    # Replace with your actual connection string
+    connection_string = st.secrets.get("database", {}).get("connection_string", "")
+    if not connection_string:
+        st.error("Database connection string not found in secrets. Please configure it.")
+        return None
+    
+    try:
+        conn = pyodbc.connect(connection_string)
+        return conn
+    except Exception as e:
+        st.error(f"Failed to connect to database: {str(e)}")
+        return None
 
-The framework adheres to clean code architecture principles and emphasizes modularity, with clear boundaries and separation of concerns. Each component is responsible for a single, well-defined task, making the system open to extension without impacting existing logic. This ensures new functionality can be introduced safely and with confidence.
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_all_batches():
+    """Get all batch details"""
+    conn = init_connection()
+    if conn is None:
+        return pd.DataFrame()
+    
+    query = """
+    SELECT batch_name, batch_description, src_system_id, enabled_flag, 
+           created_by, created_date, last_modified_by, last_modified_date 
+    FROM atlaas_metadata_catalog.ae_batch
+    ORDER BY batch_name
+    """
+    
+    try:
+        df = pd.read_sql(query, conn)
+        return df
+    except Exception as e:
+        st.error(f"Failed to fetch batch data: {str(e)}")
+        return pd.DataFrame()
 
-This work reflects my strengths in backend engineering, system design, and clean code practices, and has laid a solid foundation for a scalable, maintainable, and cost-efficient data pipeline ecosystem. By prioritizing clarity, reusability, and extensibility, the framework positions the team for long-term success and operational stability.
+def update_batch(batch_name, updated_data):
+    """Update batch details in database"""
+    conn = init_connection()
+    if conn is None:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Prepare update query
+        set_clause = """
+        batch_description = ?, 
+        src_system_id = ?, 
+        enabled_flag = ?, 
+        last_modified_by = ?, 
+        last_modified_date = ?
+        """
+        
+        query = f"""
+        UPDATE atlaas_metadata_catalog.ae_batch 
+        SET {set_clause}
+        WHERE batch_name = ?
+        """
+        
+        # Execute update
+        cursor.execute(query, (
+            updated_data['batch_description'],
+            updated_data['src_system_id'],
+            updated_data['enabled_flag'],
+            updated_data['last_modified_by'],
+            datetime.now(),
+            batch_name
+        ))
+        
+        conn.commit()
+        cursor.close()
+        
+        # Clear cache to refresh data
+        get_all_batches.clear()
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Failed to update batch: {str(e)}")
+        return False
 
-
-
-focus
-
-As we continue evolving the data platform, my focus will be on refining the framework to be even more robust, scalable, and efficient from an architectural standpoint. I aim to enhance its flexibility and maintainability while keeping performance and cost-efficiency at the forefront. Continued progress in modularizing key components and abstracting logic cleanly will be crucial to achieving long-term sustainability of the system.
-
-In the near term, I see opportunities to improve developer experience through better documentation, onboarding, and observability. I also want to ensure strong test coverage and build a more intuitive configuration-driven approach that reduces manual intervention and encourages safe extensibility.
-
-On a personal development level, I’m committed to deepening my understanding of distributed data processing, clean architecture principles, and effective engineering communication. I also want to grow as a collaborator by offering mentorship, contributing to technical discussions, and supporting the team’s overall success through thoughtful engineering practices.
-
-
-summary
-
-This year, I am delivering significant, high-impact contributions by architecting a data pipeline framework that not only meets current business demands but is also being built for long-term scalability and adaptability. The modular and extensible nature of the design reflects a deep understanding of clean code principles and system design, resulting in a reliable, maintainable, and efficient platform that minimizes technical debt and supports rapid innovation.
-
-I am proactively engaging in risk management practices, ensuring early detection and transparent communication of potential issues, which is essential to maintaining operational excellence. While some incidents have occurred outside my direct scope, my approach emphasizes accountability and collaboration, reinforcing the team’s ability to respond and learn effectively.
-
-Looking ahead, my focus remains on continuously refining the architecture, enhancing automation, and strengthening cross-team collaboration to further elevate performance and resilience. My disciplined, thoughtful approach underscores my commitment to delivering sustained, measurable value — positioning me as a key contributor to the organization’s ongoing success.
-
-Given the foundational nature of my work and its critical role in supporting business continuity and innovation, I am confident that my expertise and contributions provide significant and lasting value, helping to ensure the team’s continued success and resilience.
-
-
-The code architecture I am helping design integrates robust Kafka logging paired with a sophisticated retry mechanism. This approach not only ensures reliable, fault-tolerant data pipeline execution but also highlights my strengths in algorithmic thinking and systems design, reflecting a deep commitment to building resilient, scalable, and maintainable infrastructure.
-
-
-SELECT
-    SqlColumn,
-    CASE
-        WHEN CHARINDEX('END', SqlColumn) > 0
-             AND CHARINDEX('AS', SUBSTRING(SqlColumn, CHARINDEX('END', SqlColumn) + 3, LEN(SqlColumn) - CHARINDEX('END', SqlColumn) - 2)) > 0
-             AND LTRIM(RTRIM(SUBSTRING(SUBSTRING(SqlColumn, CHARINDEX('END', SqlColumn) + 3, LEN(SqlColumn) - CHARINDEX('END', SqlColumn) - 2), 1, CHARINDEX('AS', SUBSTRING(SqlColumn, CHARINDEX('END', SqlColumn) + 3, LEN(SqlColumn) - CHARINDEX('END', SqlColumn) - 2)) - 1))) = ''
-        THEN 1
-        ELSE 0
-    END AS HasEndAsAsColumnName
-FROM
-    YourTable;
+def main():
+    st.set_page_config(page_title="Edit Batch", page_icon="📝", layout="wide")
+    
+    st.title("📝 Edit Batch Details")
+    st.markdown("---")
+    
+    # Get all batches
+    batches_df = get_all_batches()
+    
+    if batches_df.empty:
+        st.warning("No batch data found or unable to connect to database.")
+        return
+    
+    # Create searchable dropdown
+    st.header("Select Batch to Edit")
+    
+    # Search/Filter functionality
+    search_term = st.text_input("🔍 Search batch name:", placeholder="Type to search...")
+    
+    # Filter batches based on search term
+    if search_term:
+        filtered_batches = batches_df[
+            batches_df['batch_name'].str.contains(search_term, case=False, na=False)
+        ]
+    else:
+        filtered_batches = batches_df
+    
+    if filtered_batches.empty:
+        st.warning("No batches found matching your search.")
+        return
+    
+    # Dropdown with filtered results
+    batch_names = filtered_batches['batch_name'].tolist()
+    selected_batch = st.selectbox(
+        "Choose a batch:",
+        options=batch_names,
+        index=None,
+        placeholder="Select a batch to edit..."
+    )
+    
+    if not selected_batch:
+        st.info("Please select a batch to edit.")
+        return
+    
+    # Get selected batch details
+    batch_details = batches_df[batches_df['batch_name'] == selected_batch].iloc[0]
+    
+    st.markdown("---")
+    st.header(f"Editing: {selected_batch}")
+    
+    # Create editing form
+    with st.form("batch_edit_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Read-only fields
+            st.text_input("Batch Name:", value=batch_details['batch_name'], disabled=True)
+            st.text_input("Created By:", value=str(batch_details['created_by']), disabled=True)
+            st.text_input("Created Date:", value=str(batch_details['created_date']), disabled=True)
+            
+        with col2:
+            # Editable fields
+            batch_description = st.text_area(
+                "Batch Description:", 
+                value=str(batch_details['batch_description']) if pd.notna(batch_details['batch_description']) else "",
+                height=100
+            )
+            
+            src_system_id = st.text_input(
+                "Source System ID:", 
+                value=str(batch_details['src_system_id']) if pd.notna(batch_details['src_system_id']) else ""
+            )
+            
+            enabled_flag = st.selectbox(
+                "Enabled Flag:",
+                options=['Y', 'N'],
+                index=0 if batch_details['enabled_flag'] == 'Y' else 1
+            )
+            
+            last_modified_by = st.text_input(
+                "Modified By:", 
+                value=st.session_state.get('username', 'system'),
+                help="Enter your username"
+            )
+        
+        # Display current last modified info
+        st.info(f"Last Modified: {batch_details['last_modified_date']} by {batch_details['last_modified_by']}")
+        
+        # Save button
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            submitted = st.form_submit_button("💾 Save Changes", type="primary")
+        
+        with col2:
+            if st.form_submit_button("🔄 Refresh Data"):
+                get_all_batches.clear()
+                st.rerun()
+    
+    # Handle form submission
+    if submitted:
+        if not last_modified_by.strip():
+            st.error("Please enter your username in 'Modified By' field.")
+        else:
+            updated_data = {
+                'batch_description': batch_description,
+                'src_system_id': src_system_id,
+                'enabled_flag': enabled_flag,
+                'last_modified_by': last_modified_by.strip()
+            }
+            
+            with st.spinner("Saving changes..."):
+                success = update_batch(selected_batch, updated_data)
+                
+                if success:
+                    st.success("✅ Batch details updated successfully!")
+                    st.balloons()
+                    
+                    # Show updated values
+                    with st.expander("Updated Values", expanded=True):
+                        st.write(f"**Batch Name:** {selected_batch}")
+                        st.write(f"**Description:** {batch_description}")
+                        st.write(f"**Source System ID:** {src_system_id}")
+                        st.write(f"**Enabled:** {enabled_flag}")
+                        st.write(f"**Modified By:** {last_modified_by}")
+                        st.write(f"**Modified Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                else:
+                    st.error("❌ Failed to save changes. Please try again.")
+    
+    # Show current batch summary
+    st.markdown("---")
+    st.header("Current Batch Summary")
+    
+    # Display in a nice format
+    summary_data = {
+        "Field": ["Batch Name", "Description", "Source System ID", "Enabled", "Created By", "Created Date", "Last Modified By", "Last Modified Date"],
+        "Value": [
+            batch_details['batch_name'],
+            batch_details['batch_description'] if pd.notna(batch_details['batch_description']) else "N/A",
+            batch_details['src_system_id'] if pd.notna(batch_details['src_system_id']) else "N/A",
+            batch_details['enabled_flag'],
+            batch_details['created_by'],
+            str(batch_details['created_date']),
+            batch_details['last_modified_by
