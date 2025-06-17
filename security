@@ -1,242 +1,367 @@
 import streamlit as st
+import pyodbc
 import pandas as pd
+from datetime import datetime
+import re
 
-# Initialize session state for the number of rows
-if 'num_rows' not in st.session_state:
-    st.session_state.num_rows = 1
+# Initialize session state
+if 'column_mappings' not in st.session_state:
+    st.session_state.column_mappings = []
 
-# Initialize session state to store text values as a dictionary of dictionaries
-# Structure: {row_index: {col_name: value}}
-if 'text_values' not in st.session_state:
-    st.session_state.text_values = {}
+if 'show_column_mapping' not in st.session_state:
+    st.session_state.show_column_mapping = False
 
-# Define your columns here - you can customize these
-COLUMNS = ["Name", "Email", "Phone"]  # Example columns
-# Example with more columns to test width
-# COLUMNS = ["First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "ZIP Code"]
-
-# Configuration for column widths and layout
-MAX_COLUMNS_PER_ROW = 4  # Maximum columns before switching to vertical layout
-USE_WIDE_MODE = True  # Use full width of the page
-
-st.title("Dynamic Multi-Column Text Input")
-
-# Apply wide mode if enabled
-if USE_WIDE_MODE:
-    st.set_page_config(layout="wide")
-
-# Show current layout info
-st.info(f"📊 Current setup: {len(COLUMNS)} columns | Wide mode: {'✅' if USE_WIDE_MODE else '❌'} | Max per row: {MAX_COLUMNS_PER_ROW}")
-
-# Function to add a new row
-def add_row():
-    st.session_state.num_rows += 1
-
-# Function to remove the last row
-def remove_row():
-    if st.session_state.num_rows > 1:
-        # Remove the values for the last row
-        row_to_remove = st.session_state.num_rows - 1
-        if row_to_remove in st.session_state.text_values:
-            del st.session_state.text_values[row_to_remove]
-        st.session_state.num_rows -= 1
-
-# Function to remove a specific row and reindex
-def remove_specific_row(row_index):
-    """Remove a specific row and reindex all subsequent rows"""
-    if st.session_state.num_rows > 1:
-        # Remove the specific row
-        if row_index in st.session_state.text_values:
-            del st.session_state.text_values[row_index]
-        
-        # Reindex all rows after the deleted row
-        new_text_values = {}
-        new_index = 0
-        
-        for old_index in range(st.session_state.num_rows):
-            if old_index != row_index:  # Skip the deleted row
-                if old_index in st.session_state.text_values:
-                    new_text_values[new_index] = st.session_state.text_values[old_index]
-                new_index += 1
-        
-        # Update session state
-        st.session_state.text_values = new_text_values
-        st.session_state.num_rows -= 1
-
-st.write("---")
-
-# Create the multi-column text inputs
-for row in range(st.session_state.num_rows):
-    # Create a container for each row
-    row_container = st.container()
-    
-    with row_container:
-        st.write(f"**Row {row + 1}:**")
-        
-        # Initialize the row in text_values if it doesn't exist
-        if row not in st.session_state.text_values:
-            st.session_state.text_values[row] = {}
-        
-        # Decide layout based on number of columns
-        if len(COLUMNS) <= MAX_COLUMNS_PER_ROW:
-            # Horizontal layout - all columns in one row
-            cols = st.columns(len(COLUMNS) + 1)  # +1 for delete button
-            
-            # Create text inputs for each column
-            for col_idx, col_name in enumerate(COLUMNS):
-                with cols[col_idx]:
-                    # Get current value or empty string
-                    current_value = st.session_state.text_values[row].get(col_name, "")
-                    
-                    # Create unique key for this specific cell
-                    key = f"row_{row}_col_{col_name}"
-                    
-                    # Create the text input
-                    value = st.text_input(
-                        col_name,
-                        value=current_value,
-                        key=key,
-                        placeholder=f"Enter {col_name.lower()}"
-                    )
-                    
-                    # Store the value
-                    st.session_state.text_values[row][col_name] = value
-            
-            # Add delete button in the last column
-            with cols[len(COLUMNS)]:
-                st.write("")  # Empty space to align with text input height
-                if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
-                    if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
-                        remove_specific_row(row)
-                        st.rerun()
-        
-        else:
-            # Vertical layout - split into multiple rows for better width
-            col_chunks = [COLUMNS[i:i + MAX_COLUMNS_PER_ROW] for i in range(0, len(COLUMNS), MAX_COLUMNS_PER_ROW)]
-            
-            for chunk_idx, chunk in enumerate(col_chunks):
-                cols = st.columns(len(chunk))
-                
-                for col_idx, col_name in enumerate(chunk):
-                    with cols[col_idx]:
-                        # Get current value or empty string
-                        current_value = st.session_state.text_values[row].get(col_name, "")
-                        
-                        # Create unique key for this specific cell
-                        key = f"row_{row}_col_{col_name}"
-                        
-                        # Create the text input with wider appearance
-                        value = st.text_input(
-                            col_name,
-                            value=current_value,
-                            key=key,
-                            placeholder=f"Enter {col_name.lower()}"
-                        )
-                        
-                        # Store the value
-                        st.session_state.text_values[row][col_name] = value
-            
-            # Add delete button on a separate line for vertical layout
-            delete_col = st.columns([5, 1])
-            with delete_col[1]:
-                if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
-                    if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
-                        remove_specific_row(row)
-                        st.rerun()
-        
-        # Add some spacing between rows
-        if row < st.session_state.num_rows - 1:
-            st.write("")
-
-# Add the "+" button below all rows
-st.write("")  # Add some space
-
-if len(COLUMNS) <= MAX_COLUMNS_PER_ROW:
-    # Horizontal layout - position + button in same column as delete buttons
-    plus_cols = st.columns(len(COLUMNS) + 1)
-    with plus_cols[len(COLUMNS)]:
-        if st.button("➕", help="Add new row"):
-            add_row()
-            st.rerun()
-else:
-    # Vertical layout - center the + button
-    plus_col = st.columns([5, 1])
-    with plus_col[1]:
-        if st.button("➕", help="Add new row"):
-            add_row()
-            st.rerun()
-
-st.write("---")
-
-# Display options
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    if st.button("Show All Values"):
-        st.write("### Current Data:")
-        
-        # Create a list to store all rows for display
-        display_data = []
-        
-        for row in range(st.session_state.num_rows):
-            row_data = {}
-            for col_name in COLUMNS:
-                value = st.session_state.text_values.get(row, {}).get(col_name, "")
-                row_data[col_name] = value
-            display_data.append(row_data)
-        
-        # Display as a dataframe
-        if display_data:
-            df = pd.DataFrame(display_data)
-            st.dataframe(df, use_container_width=True)
-
-with col2:
-    if st.button("Show as JSON"):
-        st.write("### Data as JSON:")
-        # Clean data (remove empty values)
-        clean_data = {}
-        for row in range(st.session_state.num_rows):
-            row_data = {}
-            for col_name in COLUMNS:
-                value = st.session_state.text_values.get(row, {}).get(col_name, "")
-                if value.strip():  # Only include non-empty values
-                    row_data[col_name] = value
-            if row_data:  # Only include rows with data
-                clean_data[f"Row {row + 1}"] = row_data
-        
-        st.json(clean_data)
-
-with col3:
-    if st.button("Clear All"):
-        st.session_state.text_values = {}
-        st.rerun()
-
-# Optional: Export functionality
-st.write("---")
-if st.button("Export to CSV"):
-    # Create DataFrame from current data
-    export_data = []
-    for row in range(st.session_state.num_rows):
-        row_data = {}
-        for col_name in COLUMNS:
-            value = st.session_state.text_values.get(row, {}).get(col_name, "")
-            row_data[col_name] = value
-        export_data.append(row_data)
-    
-    if export_data:
-        df = pd.DataFrame(export_data)
-        csv = df.to_csv(index=False)
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name="multi_column_data.csv",
-            mime="text/csv"
+# Database connection function
+@st.cache_resource
+def get_db_connection():
+    """
+    Establish connection to SQL Server database
+    Replace with your actual connection parameters
+    """
+    try:
+        # Update these connection parameters with your actual database details
+        conn_str = (
+            "DRIVER={ODBC Driver 17 for SQL Server};"
+            "SERVER=your_server_name;"
+            "DATABASE=your_database_name;"
+            "UID=your_username;"
+            "PWD=your_password;"
         )
+        conn = pyodbc.connect(conn_str)
+        return conn
+    except Exception as e:
+        st.error(f"Database connection failed: {str(e)}")
+        return None
 
-# Show current session state for debugging (optional)
-if st.checkbox("Show Debug Info"):
-    st.write("Debug - Session State:")
-    st.json({
-        "num_rows": st.session_state.num_rows,
-        "text_values": st.session_state.text_values
-    })
+def get_batches():
+    """Fetch enabled batches from database"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            query = "SELECT batch_id, batch_name FROM atlaas_metadata_catalog.ae_batch WHERE enabled_flag = 'Y'"
+            df = pd.read_sql(query, conn)
+            conn.close()
+            return df
+        except Exception as e:
+            st.error(f"Error fetching batches: {str(e)}")
+            conn.close()
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+def validate_sql(sql_code):
+    """
+    Validate SQL code - placeholder function
+    You can implement actual SQL validation logic here
+    """
+    # Placeholder - always returns True for now
+    return True
+
+def extract_select_columns(sql_query):
+    """
+    Extract column information from SELECT statement
+    This is a basic implementation - you may want to enhance it
+    """
+    try:
+        # Basic regex to extract SELECT clause
+        select_pattern = r'SELECT\s+(.*?)\s+FROM'
+        match = re.search(select_pattern, sql_query.upper(), re.DOTALL)
+        
+        if match:
+            select_clause = match.group(1)
+            # Split by comma and clean up
+            columns = [col.strip() for col in select_clause.split(',')]
+            return columns
+        return []
+    except:
+        return []
+
+def add_column_mapping_row():
+    """Add a new row to column mappings"""
+    new_row = {
+        'source_table': '',
+        'source_column': '',
+        'target_table': '',
+        'target_column': '',
+        'target_column_desc': '',
+        'expression': '',
+        'enabled_flag': 'Y',
+        'created_by': st.session_state.get('user_name', 'system'),
+        'created_date': datetime.now(),
+        'last_modified_by': st.session_state.get('user_name', 'system'),
+        'last_modified_date': datetime.now()
+    }
+    st.session_state.column_mappings.append(new_row)
+
+def delete_column_mapping_row(index):
+    """Delete a column mapping row"""
+    if 0 <= index < len(st.session_state.column_mappings):
+        st.session_state.column_mappings.pop(index)
+
+def insert_rule_data(batch_id, rule_data, column_mappings, joins_data):
+    """Insert rule and related data into database"""
+    conn = get_db_connection()
+    if not conn:
+        return False, "Database connection failed"
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Insert into ae_rules table
+        rule_insert_query = """
+        INSERT INTO atlaas_metadata_catalog.ae_rules 
+        (batch_id, rule_name, rule_description, rule_category, rule_type, rule_order,
+         input_parameters, target_dataset, target_type, enabled_flag, src_system_id,
+         rule_start_date, rule_end_date, additional_details, save_as_view, view_name,
+         rule_execution_code, created_by, created_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        cursor.execute(rule_insert_query, (
+            batch_id, rule_data['rule_name'], rule_data['rule_description'],
+            rule_data['rule_category'], rule_data['rule_type'], rule_data['rule_order'],
+            rule_data['input_parameters'], rule_data['target_dataset'], rule_data['target_type'],
+            rule_data['enabled_flag'], rule_data['src_system_id'], rule_data['rule_start_date'],
+            rule_data['rule_end_date'], rule_data['additional_details'], rule_data['save_as_view'],
+            rule_data['view_name'], rule_data['rule_execution_code'], 
+            st.session_state.get('user_name', 'system'), datetime.now()
+        ))
+        
+        # Insert column mappings if any
+        if column_mappings:
+            mapping_insert_query = """
+            INSERT INTO atlaas_metadata_catalog.ae_rules_column_mapping
+            (rule_name, source_table, source_column, target_table, target_column,
+             target_column_desc, expression, enabled_flag, created_by, created_date,
+             last_modified_by, last_modified_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            for mapping in column_mappings:
+                cursor.execute(mapping_insert_query, (
+                    rule_data['rule_name'], mapping['source_table'], mapping['source_column'],
+                    mapping['target_table'], mapping['target_column'], mapping['target_column_desc'],
+                    mapping['expression'], mapping['enabled_flag'], mapping['created_by'],
+                    mapping['created_date'], mapping['last_modified_by'], mapping['last_modified_date']
+                ))
+        
+        # Insert joins data
+        joins_insert_query = """
+        INSERT INTO atlaas_metadata_catalog.ae_rules_joins
+        (rule_name, joins, filter, group_by, order_by, enabled_flag, created_by, created_date,
+         last_modified_by, last_modified_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        cursor.execute(joins_insert_query, (
+            rule_data['rule_name'], joins_data['joins'], joins_data['filter'],
+            joins_data['group_by'], joins_data['order_by'], joins_data['enabled_flag'],
+            st.session_state.get('user_name', 'system'), datetime.now(),
+            st.session_state.get('user_name', 'system'), datetime.now()
+        ))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True, "Rule added successfully!"
+        
+    except Exception as e:
+        conn.rollback()
+        cursor.close()
+        conn.close()
+        return False, f"Error inserting data: {str(e)}"
+
+# Main Streamlit App
+def main():
+    st.title("Batch Rule Management System")
+    st.markdown("Add rules to PySpark batches with SQL Server integration")
+    
+    # User identification (you might want to implement proper authentication)
+    if 'user_name' not in st.session_state:
+        st.session_state.user_name = st.text_input("Enter your username:", value="admin")
+    
+    # Step 1: Select Batch
+    st.header("1. Select Batch")
+    batches_df = get_batches()
+    
+    if batches_df.empty:
+        st.error("No enabled batches found or database connection issue")
+        return
+    
+    # Create a selectbox with batch options
+    batch_options = dict(zip(batches_df['batch_name'], batches_df['batch_id']))
+    selected_batch_name = st.selectbox("Select a batch:", list(batch_options.keys()))
+    selected_batch_id = batch_options[selected_batch_name]
+    
+    st.success(f"Selected Batch: {selected_batch_name} (ID: {selected_batch_id})")
+    
+    # Step 2: Rule Details
+    st.header("2. Rule Details")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        rule_name = st.text_input("Rule Name*", key="rule_name")
+        rule_description = st.text_area("Rule Description", key="rule_description")
+        rule_category = st.selectbox("Rule Category", ["Data Quality", "Transformation", "Validation", "Other"])
+        rule_type = st.selectbox("Rule Type", ["SQL", "Iceberg Update", "Iceberg Merge", "Python Function"])
+        rule_order = st.number_input("Rule Order", min_value=1, value=1)
+    
+    with col2:
+        input_parameters = st.text_area("Input Parameters", key="input_parameters")
+        target_dataset = st.text_input("Target Dataset", key="target_dataset")
+        target_type = st.selectbox("Target Type", ["Table", "View", "File"])
+        enabled_flag = st.selectbox("Enabled", ["Y", "N"], index=0)
+        src_system_id = st.text_input("Source System ID", key="src_system_id")
+        
+        col2a, col2b = st.columns(2)
+        with col2a:
+            rule_start_date = st.date_input("Rule Start Date")
+        with col2b:
+            rule_end_date = st.date_input("Rule End Date")
+        
+        additional_details = st.text_area("Additional Details", key="additional_details")
+        save_as_view = st.selectbox("Save As View", ["Y", "N"], index=1)
+        view_name = st.text_input("View Name", key="view_name")
+    
+    # Step 3: Rule Execution Code
+    st.header("3. Rule Execution Code")
+    rule_execution_code = st.text_area("Rule Execution Code", height=200, key="rule_execution_code")
+    
+    # Validate SQL Button
+    if st.button("Validate SQL"):
+        if rule_execution_code.strip():
+            is_valid = validate_sql(rule_execution_code)
+            if is_valid:
+                st.success("SQL is valid!")
+                # Show column mapping section if it's a SQL rule
+                if rule_type == "SQL" and "SELECT" in rule_execution_code.upper():
+                    st.session_state.show_column_mapping = True
+            else:
+                st.error("SQL validation failed!")
+        else:
+            st.warning("Please enter rule execution code first")
+    
+    # Step 4: Column Mapping (for SQL rules)
+    if st.session_state.show_column_mapping and rule_type == "SQL":
+        st.header("4. Column Mapping")
+        
+        # Initialize with some rows if empty
+        if not st.session_state.column_mappings:
+            add_column_mapping_row()
+        
+        # Display column mapping table
+        for i, mapping in enumerate(st.session_state.column_mappings):
+            st.subheader(f"Column Mapping {i+1}")
+            
+            col_del, col_source_table, col_source_col, col_target_table, col_target_col = st.columns([1, 3, 3, 3, 3])
+            
+            with col_del:
+                if st.button("➖", key=f"delete_{i}", help="Delete this row"):
+                    delete_column_mapping_row(i)
+                    st.rerun()
+            
+            with col_source_table:
+                st.session_state.column_mappings[i]['source_table'] = st.text_input(
+                    "Source Table", value=mapping['source_table'], key=f"src_table_{i}")
+            
+            with col_source_col:
+                st.session_state.column_mappings[i]['source_column'] = st.text_input(
+                    "Source Column", value=mapping['source_column'], key=f"src_col_{i}")
+            
+            with col_target_table:
+                st.session_state.column_mappings[i]['target_table'] = st.text_input(
+                    "Target Table", value=mapping['target_table'], key=f"tgt_table_{i}")
+            
+            with col_target_col:
+                st.session_state.column_mappings[i]['target_column'] = st.text_input(
+                    "Target Column", value=mapping['target_column'], key=f"tgt_col_{i}")
+            
+            col_desc, col_expr, col_enabled = st.columns(3)
+            
+            with col_desc:
+                st.session_state.column_mappings[i]['target_column_desc'] = st.text_input(
+                    "Target Column Description", value=mapping['target_column_desc'], key=f"tgt_desc_{i}")
+            
+            with col_expr:
+                st.session_state.column_mappings[i]['expression'] = st.text_input(
+                    "Expression", value=mapping['expression'], key=f"expr_{i}")
+            
+            with col_enabled:
+                st.session_state.column_mappings[i]['enabled_flag'] = st.selectbox(
+                    "Enabled", ["Y", "N"], index=0 if mapping['enabled_flag'] == 'Y' else 1, key=f"enabled_{i}")
+        
+        # Add new row button
+        if st.button("➕ Add Column Mapping"):
+            add_column_mapping_row()
+            st.rerun()
+    
+    # Step 5: SQL Components (Joins, Filters, etc.)
+    if rule_type == "SQL":
+        st.header("5. SQL Components")
+        
+        joins = st.text_area("Joins", key="joins", help="JOIN clauses")
+        filter_clause = st.text_area("Filter", key="filter", help="WHERE conditions")
+        group_by = st.text_input("Group By", key="group_by", help="GROUP BY columns")
+        order_by = st.text_input("Order By", key="order_by", help="ORDER BY columns")
+    
+    # Step 6: Add Rule Button
+    st.header("6. Save Rule")
+    
+    if st.button("Add Rule", type="primary"):
+        # Validation
+        if not rule_name.strip():
+            st.error("Rule Name is required!")
+            return
+        
+        if not rule_execution_code.strip():
+            st.error("Rule Execution Code is required!")
+            return
+        
+        # Prepare rule data
+        rule_data = {
+            'rule_name': rule_name,
+            'rule_description': rule_description,
+            'rule_category': rule_category,
+            'rule_type': rule_type,
+            'rule_order': rule_order,
+            'input_parameters': input_parameters,
+            'target_dataset': target_dataset,
+            'target_type': target_type,
+            'enabled_flag': enabled_flag,
+            'src_system_id': src_system_id,
+            'rule_start_date': rule_start_date,
+            'rule_end_date': rule_end_date,
+            'additional_details': additional_details,
+            'save_as_view': save_as_view,
+            'view_name': view_name,
+            'rule_execution_code': rule_execution_code
+        }
+        
+        # Prepare joins data
+        joins_data = {
+            'joins': joins if rule_type == "SQL" else '',
+            'filter': filter_clause if rule_type == "SQL" else '',
+            'group_by': group_by if rule_type == "SQL" else '',
+            'order_by': order_by if rule_type == "SQL" else '',
+            'enabled_flag': 'Y'
+        }
+        
+        # Insert data
+        success, message = insert_rule_data(
+            selected_batch_id, 
+            rule_data, 
+            st.session_state.column_mappings if rule_type == "SQL" else [],
+            joins_data
+        )
+        
+        if success:
+            st.success(message)
+            # Reset form
+            st.session_state.column_mappings = []
+            st.session_state.show_column_mapping = False
+            st.rerun()
+        else:
+            st.error(message)
+
+if __name__ == "__main__":
+    main()
