@@ -52,16 +52,6 @@ def remove_specific_row(row_index):
         st.session_state.text_values = new_text_values
         st.session_state.num_rows -= 1
 
-# Create columns for buttons
-col1, col2 = st.columns(2)
-
-with col1:
-    st.button("Add More Row", on_click=add_row)
-
-with col2:
-    if st.session_state.num_rows > 1:
-        st.button("Remove Last Row", on_click=remove_row)
-
 st.write("---")
 
 # Create the multi-column text inputs
@@ -70,20 +60,10 @@ for row in range(st.session_state.num_rows):
     row_container = st.container()
     
     with row_container:
-        # Row header with delete button
-        col_header, col_delete = st.columns([4, 1])
+        st.write(f"**Row {row + 1}:**")
         
-        with col_header:
-            st.write(f"**Row {row + 1}:**")
-        
-        with col_delete:
-            if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
-                if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
-                    remove_specific_row(row)
-                    st.rerun()
-        
-        # Create columns for this row
-        cols = st.columns(len(COLUMNS))
+        # Create columns for this row + one extra for delete button
+        cols = st.columns(len(COLUMNS) + 1)
         
         # Initialize the row in text_values if it doesn't exist
         if row not in st.session_state.text_values:
@@ -109,9 +89,25 @@ for row in range(st.session_state.num_rows):
                 # Store the value
                 st.session_state.text_values[row][col_name] = value
         
+        # Add delete button in the last column
+        with cols[len(COLUMNS)]:
+            st.write("")  # Empty space to align with text input height
+            if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
+                if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
+                    remove_specific_row(row)
+                    st.rerun()
+        
         # Add some spacing between rows
         if row < st.session_state.num_rows - 1:
             st.write("")
+
+# Add the "+" button below all rows
+st.write("")  # Add some space
+plus_cols = st.columns(len(COLUMNS) + 1)
+with plus_cols[len(COLUMNS)]:  # Position the + button in the same column as delete buttons
+    if st.button("➕", help="Add new row"):
+        add_row()
+        st.rerun()
 
 st.write("---")
 
