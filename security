@@ -1,244 +1,189 @@
 import streamlit as st
 import pandas as pd
-import pyodbc
-from datetime import datetime
 
-# Database connection configuration
-@st.cache_resource
-def init_connection():
-    """Initialize database connection"""
-    # Replace with your actual connection string
-    connection_string = st.secrets.get("database", {}).get("connection_string", "")
-    if not connection_string:
-        st.error("Database connection string not found in secrets. Please configure it.")
-        return None
-    
-    try:
-        conn = pyodbc.connect(connection_string)
-        return conn
-    except Exception as e:
-        st.error(f"Failed to connect to database: {str(e)}")
-        return None
+# Initialize session state for the number of rows
+if 'num_rows' not in st.session_state:
+    st.session_state.num_rows = 1
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def get_all_batches():
-    """Get all batch details"""
-    conn = init_connection()
-    if conn is None:
-        return pd.DataFrame()
-    
-    query = """
-    SELECT batch_name, batch_description, src_system_id, enabled_flag, 
-           created_by, created_date, last_modified_by, last_modified_date 
-    FROM atlaas_metadata_catalog.ae_batch
-    ORDER BY batch_name
-    """
-    
-    try:
-        df = pd.read_sql(query, conn)
-        return df
-    except Exception as e:
-        st.error(f"Failed to fetch batch data: {str(e)}")
-        return pd.DataFrame()
+# Initialize session state to store text values as a dictionary of dictionaries
+# Structure: {row_index: {col_name: value}}
+if 'text_values' not in st.session_state:
+    st.session_state.text_values = {}
 
-def update_batch(batch_name, updated_data):
-    """Update batch details in database"""
-    conn = init_connection()
-    if conn is None:
-        return False
-    
-    try:
-        cursor = conn.cursor()
-        
-        # Prepare update query
-        set_clause = """
-        batch_description = ?, 
-        src_system_id = ?, 
-        enabled_flag = ?, 
-        last_modified_by = ?, 
-        last_modified_date = ?
-        """
-        
-        query = f"""
-        UPDATE atlaas_metadata_catalog.ae_batch 
-        SET {set_clause}
-        WHERE batch_name = ?
-        """
-        
-        # Execute update
-        cursor.execute(query, (
-            updated_data['batch_description'],
-            updated_data['src_system_id'],
-            updated_data['enabled_flag'],
-            updated_data['last_modified_by'],
-            datetime.now(),
-            batch_name
-        ))
-        
-        conn.commit()
-        cursor.close()
-        
-        # Clear cache to refresh data
-        get_all_batches.clear()
-        
-        return True
-        
-    except Exception as e:
-        st.error(f"Failed to update batch: {str(e)}")
-        return False
+# Define your columns here - you can customize these
+COLUMNS = ["Name", "Email", "Phone"]  # Example columns
+# Or you could make it configurable:
+# COLUMNS = ["Column 1", "Column 2", "Column 3"]
 
-def main():
-    st.set_page_config(page_title="Edit Batch", page_icon="📝", layout="wide")
-    
-    st.title("📝 Edit Batch Details")
-    st.markdown("---")
-    
-    # Get all batches
-    batches_df = get_all_batches()
-    
-    if batches_df.empty:
-        st.warning("No batch data found or unable to connect to database.")
-        return
-    
-    # Create searchable dropdown
-    st.header("Select Batch to Edit")
-    
-    # Search/Filter functionality
-    search_term = st.text_input("🔍 Search batch name:", placeholder="Type to search...")
-    
-    # Filter batches based on search term
-    if search_term:
-        filtered_batches = batches_df[
-            batches_df['batch_name'].str.contains(search_term, case=False, na=False)
-        ]
-    else:
-        filtered_batches = batches_df
-    
-    if filtered_batches.empty:
-        st.warning("No batches found matching your search.")
-        return
-    
-    # Dropdown with filtered results
-    batch_names = filtered_batches['batch_name'].tolist()
-    selected_batch = st.selectbox(
-        "Choose a batch:",
-        options=batch_names,
-        index=None,
-        placeholder="Select a batch to edit..."
-    )
-    
-    if not selected_batch:
-        st.info("Please select a batch to edit.")
-        return
-    
-    # Get selected batch details
-    batch_details = batches_df[batches_df['batch_name'] == selected_batch].iloc[0]
-    
-    st.markdown("---")
-    st.header(f"Editing: {selected_batch}")
-    
-    # Create editing form
-    with st.form("batch_edit_form"):
-        col1, col2 = st.columns(2)
+st.title("Dynamic Multi-Column Text Input")
+
+# Function to add a new row
+def add_row():
+    st.session_state.num_rows += 1
+
+# Function to remove the last row
+def remove_row():
+    if st.session_state.num_rows > 1:
+        # Remove the values for the last row
+        row_to_remove = st.session_state.num_rows - 1
+        if row_to_remove in st.session_state.text_values:
+            del st.session_state.text_values[row_to_remove]
+        st.session_state.num_rows -= 1
+
+# Function to remove a specific row and reindex
+def remove_specific_row(row_index):
+    """Remove a specific row and reindex all subsequent rows"""
+    if st.session_state.num_rows > 1:
+        # Remove the specific row
+        if row_index in st.session_state.text_values:
+            del st.session_state.text_values[row_index]
         
-        with col1:
-            # Read-only fields
-            st.text_input("Batch Name:", value=batch_details['batch_name'], disabled=True)
-            st.text_input("Created By:", value=str(batch_details['created_by']), disabled=True)
-            st.text_input("Created Date:", value=str(batch_details['created_date']), disabled=True)
-            
-        with col2:
-            # Editable fields
-            batch_description = st.text_area(
-                "Batch Description:", 
-                value=str(batch_details['batch_description']) if pd.notna(batch_details['batch_description']) else "",
-                height=100
-            )
-            
-            src_system_id = st.text_input(
-                "Source System ID:", 
-                value=str(batch_details['src_system_id']) if pd.notna(batch_details['src_system_id']) else ""
-            )
-            
-            enabled_flag = st.selectbox(
-                "Enabled Flag:",
-                options=['Y', 'N'],
-                index=0 if batch_details['enabled_flag'] == 'Y' else 1
-            )
-            
-            last_modified_by = st.text_input(
-                "Modified By:", 
-                value=st.session_state.get('username', 'system'),
-                help="Enter your username"
-            )
+        # Reindex all rows after the deleted row
+        new_text_values = {}
+        new_index = 0
         
-        # Display current last modified info
-        st.info(f"Last Modified: {batch_details['last_modified_date']} by {batch_details['last_modified_by']}")
+        for old_index in range(st.session_state.num_rows):
+            if old_index != row_index:  # Skip the deleted row
+                if old_index in st.session_state.text_values:
+                    new_text_values[new_index] = st.session_state.text_values[old_index]
+                new_index += 1
         
-        # Save button
-        col1, col2, col3 = st.columns([1, 1, 2])
-        
-        with col1:
-            submitted = st.form_submit_button("💾 Save Changes", type="primary")
-        
-        with col2:
-            if st.form_submit_button("🔄 Refresh Data"):
-                get_all_batches.clear()
-                st.rerun()
+        # Update session state
+        st.session_state.text_values = new_text_values
+        st.session_state.num_rows -= 1
+
+# Create columns for buttons
+col1, col2 = st.columns(2)
+
+with col1:
+    st.button("Add More Row", on_click=add_row)
+
+with col2:
+    if st.session_state.num_rows > 1:
+        st.button("Remove Last Row", on_click=remove_row)
+
+st.write("---")
+
+# Create the multi-column text inputs
+for row in range(st.session_state.num_rows):
+    # Create a container for each row
+    row_container = st.container()
     
-    # Handle form submission
-    if submitted:
-        if not last_modified_by.strip():
-            st.error("Please enter your username in 'Modified By' field.")
-        else:
-            updated_data = {
-                'batch_description': batch_description,
-                'src_system_id': src_system_id,
-                'enabled_flag': enabled_flag,
-                'last_modified_by': last_modified_by.strip()
-            }
-            
-            with st.spinner("Saving changes..."):
-                success = update_batch(selected_batch, updated_data)
+    with row_container:
+        # Row header with delete button
+        col_header, col_delete = st.columns([4, 1])
+        
+        with col_header:
+            st.write(f"**Row {row + 1}:**")
+        
+        with col_delete:
+            if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
+                if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
+                    remove_specific_row(row)
+                    st.rerun()
+        
+        # Create columns for this row
+        cols = st.columns(len(COLUMNS))
+        
+        # Initialize the row in text_values if it doesn't exist
+        if row not in st.session_state.text_values:
+            st.session_state.text_values[row] = {}
+        
+        # Create text inputs for each column
+        for col_idx, col_name in enumerate(COLUMNS):
+            with cols[col_idx]:
+                # Get current value or empty string
+                current_value = st.session_state.text_values[row].get(col_name, "")
                 
-                if success:
-                    st.success("✅ Batch details updated successfully!")
-                    st.balloons()
-                    
-                    # Show updated values
-                    with st.expander("Updated Values", expanded=True):
-                        st.write(f"**Batch Name:** {selected_batch}")
-                        st.write(f"**Description:** {batch_description}")
-                        st.write(f"**Source System ID:** {src_system_id}")
-                        st.write(f"**Enabled:** {enabled_flag}")
-                        st.write(f"**Modified By:** {last_modified_by}")
-                        st.write(f"**Modified Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                else:
-                    st.error("❌ Failed to save changes. Please try again.")
-    
-    # Show current batch summary
-    st.markdown("---")
-    st.header("Current Batch Summary")
-    
-        # Display in a nice format
-    summary_data = {
-        "Field": ["Batch Name", "Description", "Source System ID", "Enabled", "Created By", "Created Date", "Last Modified By", "Last Modified Date"],
-        "Value": [
-            batch_details['batch_name'],
-            batch_details['batch_description'] if pd.notna(batch_details['batch_description']) else "N/A",
-            batch_details['src_system_id'] if pd.notna(batch_details['src_system_id']) else "N/A",
-            batch_details['enabled_flag'],
-            batch_details['created_by'],
-            str(batch_details['created_date']),
-            batch_details['last_modified_by'] if pd.notna(batch_details['last_modified_by']) else "N/A",
-            str(batch_details['last_modified_date']) if pd.notna(batch_details['last_modified_date']) else "N/A"
-        ]
-    }
-    
-    summary_df = pd.DataFrame(summary_data)
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+                # Create unique key for this specific cell
+                key = f"row_{row}_col_{col_name}"
+                
+                # Create the text input
+                value = st.text_input(
+                    col_name,
+                    value=current_value,
+                    key=key,
+                    placeholder=f"Enter {col_name.lower()}"
+                )
+                
+                # Store the value
+                st.session_state.text_values[row][col_name] = value
+        
+        # Add some spacing between rows
+        if row < st.session_state.num_rows - 1:
+            st.write("")
 
-if __name__ == "__main__":
-    main()
-ted_date']),
-            batch_details['last_modified_by
+st.write("---")
+
+# Display options
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("Show All Values"):
+        st.write("### Current Data:")
+        
+        # Create a list to store all rows for display
+        display_data = []
+        
+        for row in range(st.session_state.num_rows):
+            row_data = {}
+            for col_name in COLUMNS:
+                value = st.session_state.text_values.get(row, {}).get(col_name, "")
+                row_data[col_name] = value
+            display_data.append(row_data)
+        
+        # Display as a dataframe
+        if display_data:
+            df = pd.DataFrame(display_data)
+            st.dataframe(df, use_container_width=True)
+
+with col2:
+    if st.button("Show as JSON"):
+        st.write("### Data as JSON:")
+        # Clean data (remove empty values)
+        clean_data = {}
+        for row in range(st.session_state.num_rows):
+            row_data = {}
+            for col_name in COLUMNS:
+                value = st.session_state.text_values.get(row, {}).get(col_name, "")
+                if value.strip():  # Only include non-empty values
+                    row_data[col_name] = value
+            if row_data:  # Only include rows with data
+                clean_data[f"Row {row + 1}"] = row_data
+        
+        st.json(clean_data)
+
+with col3:
+    if st.button("Clear All"):
+        st.session_state.text_values = {}
+        st.rerun()
+
+# Optional: Export functionality
+st.write("---")
+if st.button("Export to CSV"):
+    # Create DataFrame from current data
+    export_data = []
+    for row in range(st.session_state.num_rows):
+        row_data = {}
+        for col_name in COLUMNS:
+            value = st.session_state.text_values.get(row, {}).get(col_name, "")
+            row_data[col_name] = value
+        export_data.append(row_data)
+    
+    if export_data:
+        df = pd.DataFrame(export_data)
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name="multi_column_data.csv",
+            mime="text/csv"
+        )
+
+# Show current session state for debugging (optional)
+if st.checkbox("Show Debug Info"):
+    st.write("Debug - Session State:")
+    st.json({
+        "num_rows": st.session_state.num_rows,
+        "text_values": st.session_state.text_values
+    })
