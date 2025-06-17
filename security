@@ -12,10 +12,21 @@ if 'text_values' not in st.session_state:
 
 # Define your columns here - you can customize these
 COLUMNS = ["Name", "Email", "Phone"]  # Example columns
-# Or you could make it configurable:
-# COLUMNS = ["Column 1", "Column 2", "Column 3"]
+# Example with more columns to test width
+# COLUMNS = ["First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "ZIP Code"]
+
+# Configuration for column widths and layout
+MAX_COLUMNS_PER_ROW = 4  # Maximum columns before switching to vertical layout
+USE_WIDE_MODE = True  # Use full width of the page
 
 st.title("Dynamic Multi-Column Text Input")
+
+# Apply wide mode if enabled
+if USE_WIDE_MODE:
+    st.set_page_config(layout="wide")
+
+# Show current layout info
+st.info(f"📊 Current setup: {len(COLUMNS)} columns | Wide mode: {'✅' if USE_WIDE_MODE else '❌'} | Max per row: {MAX_COLUMNS_PER_ROW}")
 
 # Function to add a new row
 def add_row():
@@ -62,40 +73,76 @@ for row in range(st.session_state.num_rows):
     with row_container:
         st.write(f"**Row {row + 1}:**")
         
-        # Create columns for this row + one extra for delete button
-        cols = st.columns(len(COLUMNS) + 1)
-        
         # Initialize the row in text_values if it doesn't exist
         if row not in st.session_state.text_values:
             st.session_state.text_values[row] = {}
         
-        # Create text inputs for each column
-        for col_idx, col_name in enumerate(COLUMNS):
-            with cols[col_idx]:
-                # Get current value or empty string
-                current_value = st.session_state.text_values[row].get(col_name, "")
-                
-                # Create unique key for this specific cell
-                key = f"row_{row}_col_{col_name}"
-                
-                # Create the text input
-                value = st.text_input(
-                    col_name,
-                    value=current_value,
-                    key=key,
-                    placeholder=f"Enter {col_name.lower()}"
-                )
-                
-                # Store the value
-                st.session_state.text_values[row][col_name] = value
+        # Decide layout based on number of columns
+        if len(COLUMNS) <= MAX_COLUMNS_PER_ROW:
+            # Horizontal layout - all columns in one row
+            cols = st.columns(len(COLUMNS) + 1)  # +1 for delete button
+            
+            # Create text inputs for each column
+            for col_idx, col_name in enumerate(COLUMNS):
+                with cols[col_idx]:
+                    # Get current value or empty string
+                    current_value = st.session_state.text_values[row].get(col_name, "")
+                    
+                    # Create unique key for this specific cell
+                    key = f"row_{row}_col_{col_name}"
+                    
+                    # Create the text input
+                    value = st.text_input(
+                        col_name,
+                        value=current_value,
+                        key=key,
+                        placeholder=f"Enter {col_name.lower()}"
+                    )
+                    
+                    # Store the value
+                    st.session_state.text_values[row][col_name] = value
+            
+            # Add delete button in the last column
+            with cols[len(COLUMNS)]:
+                st.write("")  # Empty space to align with text input height
+                if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
+                    if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
+                        remove_specific_row(row)
+                        st.rerun()
         
-        # Add delete button in the last column
-        with cols[len(COLUMNS)]:
-            st.write("")  # Empty space to align with text input height
-            if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
-                if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
-                    remove_specific_row(row)
-                    st.rerun()
+        else:
+            # Vertical layout - split into multiple rows for better width
+            col_chunks = [COLUMNS[i:i + MAX_COLUMNS_PER_ROW] for i in range(0, len(COLUMNS), MAX_COLUMNS_PER_ROW)]
+            
+            for chunk_idx, chunk in enumerate(col_chunks):
+                cols = st.columns(len(chunk))
+                
+                for col_idx, col_name in enumerate(chunk):
+                    with cols[col_idx]:
+                        # Get current value or empty string
+                        current_value = st.session_state.text_values[row].get(col_name, "")
+                        
+                        # Create unique key for this specific cell
+                        key = f"row_{row}_col_{col_name}"
+                        
+                        # Create the text input with wider appearance
+                        value = st.text_input(
+                            col_name,
+                            value=current_value,
+                            key=key,
+                            placeholder=f"Enter {col_name.lower()}"
+                        )
+                        
+                        # Store the value
+                        st.session_state.text_values[row][col_name] = value
+            
+            # Add delete button on a separate line for vertical layout
+            delete_col = st.columns([5, 1])
+            with delete_col[1]:
+                if st.session_state.num_rows > 1:  # Only show delete if more than 1 row
+                    if st.button("🗑️", key=f"delete_row_{row}", help="Delete this row"):
+                        remove_specific_row(row)
+                        st.rerun()
         
         # Add some spacing between rows
         if row < st.session_state.num_rows - 1:
@@ -103,11 +150,21 @@ for row in range(st.session_state.num_rows):
 
 # Add the "+" button below all rows
 st.write("")  # Add some space
-plus_cols = st.columns(len(COLUMNS) + 1)
-with plus_cols[len(COLUMNS)]:  # Position the + button in the same column as delete buttons
-    if st.button("➕", help="Add new row"):
-        add_row()
-        st.rerun()
+
+if len(COLUMNS) <= MAX_COLUMNS_PER_ROW:
+    # Horizontal layout - position + button in same column as delete buttons
+    plus_cols = st.columns(len(COLUMNS) + 1)
+    with plus_cols[len(COLUMNS)]:
+        if st.button("➕", help="Add new row"):
+            add_row()
+            st.rerun()
+else:
+    # Vertical layout - center the + button
+    plus_col = st.columns([5, 1])
+    with plus_col[1]:
+        if st.button("➕", help="Add new row"):
+            add_row()
+            st.rerun()
 
 st.write("---")
 
